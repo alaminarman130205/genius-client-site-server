@@ -17,15 +17,30 @@ const client = new MongoClient(uri, {
   serverApi: ServerApiVersion.v1,
 });
 
+function varifyjwt(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+  const token = authHeader.split(" ")[1];
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, function (err, decoded) {
+    if (err) {
+      return res.status(401).send({ message: "unauthorized access" });
+    }
+    req.decoded = decoded;
+    next();
+  });
+}
+
 async function run() {
   try {
     const serviceCollection = client.db("genius").collection("service");
     const orderCollection = client.db("genius").collection("orders");
 
-    app.post("jwt", (req, res) => {
+    app.post("/jwt", (req, res) => {
       const user = req.body;
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
-        expireIn: "1h",
+        expiresIn: "1h",
       });
       res.send({ token });
     });
@@ -45,7 +60,14 @@ async function run() {
     });
 
     //order's api
-    app.get("/orders", async (req, res) => {
+    app.get("/orders", varifyjwt, async (req, res) => {
+      const decoded = req.decoded;
+      console.log("inside orders api", decoded);
+
+      if (decoded.email !== req.query.email) {
+        res.status(403).send({ message: "unauthorized access" });
+      }
+
       let query = {};
       if (req.query.email) {
         query = {
